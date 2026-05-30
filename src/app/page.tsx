@@ -98,6 +98,24 @@ async function readResponseErrorMessage(response: Response) {
   return text.trim() || fallback;
 }
 
+function formatChatFailure(message: string, t: typeof dictionaries.en) {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("shimmy chat request failed: backend unreachable or model crashed") ||
+    lower.includes("output.weight type not found") ||
+    lower.includes("unsupported value type") ||
+    lower.includes("maximum buffer size")
+  ) {
+    const hint = message.match(/recent runtime error:\s*(.+)$/i)?.[1]?.trim();
+    return [
+      t.chatRequestFailed,
+      hint ? `Runtime: ${hint}` : message,
+      t.chatRequestFailedAdvice,
+    ].join("\n");
+  }
+  return message;
+}
+
 export default function Home() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<DashboardTab>("overview");
@@ -643,7 +661,7 @@ export default function Home() {
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : "Chat failed";
-      setChatOutput(message);
+      setChatOutput(formatChatFailure(message, t));
       setSnackbar(errorToSnackbar(message, t));
     } finally {
       if (chatAbortController.current === controller) {
@@ -813,7 +831,7 @@ export default function Home() {
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : "Chat failed";
-      setChatOutput(message);
+      setChatOutput(formatChatFailure(message, t));
       setSnackbar(errorToSnackbar(message, t));
     } finally {
       if (chatAbortController.current === controller) {
