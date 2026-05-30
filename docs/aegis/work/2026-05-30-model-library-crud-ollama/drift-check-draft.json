@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-30-model-library-crud-ollama",
+  "taskIntentRef": "docs/aegis/work/2026-05-30-model-library-crud-ollama/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/phase-2-roadmap.md",
+    "docs/aegis/plans/2026-05-29-model-library-downloads.md"
+  ],
+  "scopeStatus": "aligned: search/select/download/CRUD/Ollama operations implemented for the requested slice",
+  "compatStatus": "preserved: Shimmy GGUF registration remains checksum/probe-bound and Ollama packages stay separate",
+  "retirementStatus": "manual local import remains supported; no old model operations removed",
+  "newRiskSignals": [
+    "Ollama pull is non-streaming in this slice, so very large downloads need future progress UI.",
+    "Remote model search is curated/recommended only, not full registry crawling."
+  ],
+  "decision": "continue"
+}

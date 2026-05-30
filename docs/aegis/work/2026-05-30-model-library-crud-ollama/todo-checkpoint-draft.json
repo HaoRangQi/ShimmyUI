@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-30-model-library-crud-ollama",
+  "currentTodo": "Final verification complete; ready for completion audit.",
+  "completedTodos": [
+    "Catalog search/list with multiple GGUF choices",
+    "Managed model delete API and UI",
+    "Ollama recommended search, custom pull, local delete, and start API/UI",
+    "Page orchestration and model-library invalidation",
+    "Verification commands passed"
+  ],
+  "activeSlice": "evidence",
+  "evidenceRefs": [
+    "src/lib/model-library/model-library.test.ts",
+    "src/app/api/api-contracts.test.ts",
+    "src/app/page.test.tsx",
+    "browser check http://127.0.0.1:37645"
+  ],
+  "blockedOn": null,
+  "nextStep": "No implementation work remains for this slice; future work can add progress streaming and remote registry integration.",
+  "updatedAt": "2026-05-30"
+}

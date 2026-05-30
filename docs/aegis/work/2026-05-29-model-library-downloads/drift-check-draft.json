@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-29-model-library-downloads",
+  "taskIntentRef": "docs/aegis/work/2026-05-29-model-library-downloads/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/phase-2-roadmap.md",
+    "docs/aegis/plans/2026-05-29-model-library-downloads.md"
+  ],
+  "scopeStatus": "aligned-current-slice",
+  "compatStatus": "preserved-existing-shimmy-api-and-config-shape; acquisition requires GGUF, catalog sha256, and successful Shimmy probe when binary is available",
+  "retirementStatus": "manual-model-directory-editing-remains-supported",
+  "newRiskSignals": [
+    "Large real catalog downloads still need progress/cancel UX.",
+    "Large probe output is currently surfaced through API error text rather than a rich structured UI state."
+  ],
+  "decision": "continue"
+}

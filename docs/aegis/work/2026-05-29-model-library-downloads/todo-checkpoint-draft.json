@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-29-model-library-downloads",
+  "currentTodo": "Complete model-library UI integration verification and prepare follow-up hardening.",
+  "completedTodos": [
+    "Core model-library GGUF/catalog/model-store tests and implementation",
+    "Ollama status/model listing boundary tests and implementation",
+    "Next API contract tests and model-library routes",
+    "Models page model-library section with curated catalog, local GGUF import, and Ollama status display",
+    "Catalog compatibility filter requires a 64-character sha256 before download exposure",
+    "Available Shimmy binary probe is required before managed model registration"
+  ],
+  "activeSlice": "evidence and handoff",
+  "evidenceRefs": [
+    "src/lib/model-library/model-library.test.ts",
+    "src/app/api/api-contracts.test.ts",
+    "src/app/page.test.tsx",
+    "docs/aegis/work/2026-05-29-model-library-downloads/90-evidence.md"
+  ],
+  "blockedOn": null,
+  "nextStep": "Follow-up hardening can add progress/cancel UX for large downloads and richer probe result display.",
+  "updatedAt": "2026-05-29"
+}

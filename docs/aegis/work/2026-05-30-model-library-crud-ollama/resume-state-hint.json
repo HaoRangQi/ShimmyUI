@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-30-model-library-crud-ollama",
+  "lastCheckpointRef": "docs/aegis/work/2026-05-30-model-library-crud-ollama/todo-checkpoint-draft.json",
+  "resumeInstruction": "If resuming, inspect current worktree and run verification before changing more code.",
+  "knownPartialWork": [
+    "Catalog search/list with multiple GGUF choices",
+    "Managed model delete API and UI",
+    "Ollama recommended search, custom pull, local delete, and start API/UI",
+    "Page orchestration and model-library invalidation",
+    "Verification commands passed"
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/aegis/work/2026-05-30-model-library-crud-ollama/10-intent.md",
+    "docs/aegis/work/2026-05-30-model-library-crud-ollama/20-checkpoint.md",
+    "docs/aegis/work/2026-05-30-model-library-crud-ollama/todo-checkpoint-draft.json"
+  ],
+  "unsafeToAssume": [
+    "Do not assume Ollama pull produces Shimmy-compatible GGUF."
+  ]
+}

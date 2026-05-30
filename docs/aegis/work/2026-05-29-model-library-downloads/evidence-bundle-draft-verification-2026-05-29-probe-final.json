@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "verification-2026-05-29-probe-final",
+  "type": "verification",
+  "source": "docs/aegis/work/2026-05-29-model-library-downloads/90-evidence.md",
+  "summary": "Final verification passed after adding Shimmy probe enforcement to local import and catalog download.",
+  "verifier": "npm run test -- src/lib/model-library/model-library.test.ts src/app/api/api-contracts.test.ts src/app/page.test.tsx; npm run test; npm run typecheck; npm run lint; npm run build; PLAYWRIGHT_PORT=3103 PLAYWRIGHT_REUSE_SERVER=1 npx playwright test --config=playwright.config.ts"
+}

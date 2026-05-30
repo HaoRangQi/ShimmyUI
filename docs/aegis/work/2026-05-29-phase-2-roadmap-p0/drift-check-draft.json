@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-29-phase-2-roadmap-p0",
+  "taskIntentRef": "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/phase-2-roadmap.md"
+  ],
+  "scopeStatus": "Inside docs/phase-2-roadmap.md phase 1 / P0 trusted operations.",
+  "compatStatus": "API paths preserved; runtime install scope unchanged; Next and fallback both protected by runtime operation lock.",
+  "retirementStatus": "Temporary duplicated lock implementation should retire into shared runtime core during roadmap architecture convergence.",
+  "newRiskSignals": [],
+  "decision": "continue"
+}

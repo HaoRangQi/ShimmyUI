@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-29-phase-2-roadmap-p0",
+  "currentTodo": "Phase 2 roadmap execution remains active; P0 trusted operations slice is complete, next slice is P1 first-run setup experience.",
+  "completedTodos": [
+    "Runtime operation lock in Next and fallback; Snackbar/ConfirmDialog/LinearProgress; localized error suggestions; system theme; label uppercase fix; E2E feedback coverage."
+  ],
+  "activeSlice": "P0 trusted operations completed",
+  "evidenceRefs": [
+    "npm run test; npm run typecheck; npm run lint; node --test tests/node/shimmy-manager.test.mjs; PLAYWRIGHT_PORT=3101 npm run test:e2e; npm run build; browser screenshot of Runtime page."
+  ],
+  "blockedOn": null,
+  "nextStep": "Plan and implement P1 setup checklist/first-run flow using existing Overview, Runtime, Config, Models, Chat paths.",
+  "updatedAt": "2026-05-29"
+}

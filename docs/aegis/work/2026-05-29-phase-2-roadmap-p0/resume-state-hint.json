@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-29-phase-2-roadmap-p0",
+  "lastCheckpointRef": "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/todo-checkpoint-draft.json",
+  "resumeInstruction": "Resume by reading docs/phase-2-roadmap.md, docs/aegis/plans/2026-05-29-phase-2-p0-trusted-operations.md, and this checkpoint; do not rework completed P0 unless regression appears.",
+  "knownPartialWork": [
+    "Runtime operation lock in Next and fallback; Snackbar/ConfirmDialog/LinearProgress; localized error suggestions; system theme; label uppercase fix; E2E feedback coverage."
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/10-intent.md",
+    "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/20-checkpoint.md",
+    "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/todo-checkpoint-draft.json"
+  ],
+  "unsafeToAssume": []
+}

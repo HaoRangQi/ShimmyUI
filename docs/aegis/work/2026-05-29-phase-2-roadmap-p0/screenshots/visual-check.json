@@ -1,0 +1,32 @@
+[
+  {
+    "name": "desktop-overview",
+    "file": "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/screenshots/desktop-overview.png",
+    "overflow": {
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "bodyClientWidth": 1440
+    }
+  },
+  {
+    "name": "mobile-overview",
+    "file": "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/screenshots/mobile-overview.png",
+    "overflow": {
+      "docScrollWidth": 412,
+      "docClientWidth": 412,
+      "bodyScrollWidth": 412,
+      "bodyClientWidth": 412
+    }
+  },
+  {
+    "name": "mobile-diagnostics",
+    "file": "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/screenshots/mobile-diagnostics.png",
+    "overflow": {
+      "docScrollWidth": 412,
+      "docClientWidth": 412,
+      "bodyScrollWidth": 412,
+      "bodyClientWidth": 412
+    }
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement Shimmy-compatible model acquisition through managed GGUF catalog/local import with Ollama detection boundaries",
+  "goal": "Implement Shimmy-compatible model acquisition through managed GGUF catalog/local import with Ollama detection boundaries",
+  "successEvidence": [],
+  "stopCondition": "Stop when success evidence is satisfied or a blocker/risk requires pause.",
+  "nonGoals": [],
+  "scope": "Model catalog, GGUF validation, managed model store, Ollama status/list detection, API and Models UI integration",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": []
+}

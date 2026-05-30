@@ -1,0 +1,29 @@
+services:
+  shimmy-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: shimmy-ui:local
+    ports:
+      - "37645:37645"
+    environment:
+      NODE_ENV: production
+      PORT: 37645
+      HOSTNAME: 0.0.0.0
+      SHIMMY_UI_HOME: /data
+      SHIMMY_UI_CONFIG_PATH: /data/config.json
+      SHIMMY_UI_RUNTIME_PATH: /data/runtime.json
+      SHIMMY_UI_USERNAME: admin
+      SHIMMY_UI_PASSWORD: change-me
+      SHIMMY_UI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - shimmy-ui-data:/data
+    restart: unless-stopped
+    # 如果你需要从宿主机访问 Shimmy API，可按需额外映射 11435:
+    # ports:
+    #   - "11435:11435"
+
+volumes:
+  shimmy-ui-data:

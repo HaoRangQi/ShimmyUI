@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "model-library owner, Next API routes, dashboard Models UI"
+  ],
+  "owners": [
+    "src/lib/model-library/** owns acquisition and Ollama operation rules"
+  ],
+  "invariants": [
+    "Shimmy downloads remain curated GGUF with checksum and probe boundary; Ollama pull remains independent from Shimmy model registration."
+  ],
+  "compatBoundary": "Existing /api/shimmy/* and config shape remain unchanged; Ollama packages are not registered as Shimmy GGUF models.",
+  "nonGoals": [
+    "Full web-wide model registry crawling and arbitrary Hugging Face search."
+  ]
+}

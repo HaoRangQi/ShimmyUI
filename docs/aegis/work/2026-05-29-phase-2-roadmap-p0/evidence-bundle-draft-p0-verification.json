@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "p0-verification",
+  "type": "verification",
+  "source": "current Codex command outputs",
+  "summary": "P0 verification passed: unit tests 25/25, typecheck passed, lint passed, fallback node tests 10/10, E2E 5 passed and 1 existing mobile lifecycle skip, production build passed.",
+  "verifier": "Codex local commands on 2026-05-29"
+}

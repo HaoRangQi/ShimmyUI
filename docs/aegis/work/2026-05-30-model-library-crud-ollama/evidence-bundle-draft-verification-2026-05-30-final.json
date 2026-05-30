@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "verification-2026-05-30-final",
+  "type": "verification",
+  "source": "docs/aegis/work/2026-05-30-model-library-crud-ollama/90-evidence.md",
+  "summary": "Final verification passed for searchable model catalog, managed CRUD, Ollama operations, mobile navigation, build, and E2E.",
+  "verifier": "npm run test; npm run typecheck; npm run lint; npm run build; PLAYWRIGHT_PORT=3103 PLAYWRIGHT_REUSE_SERVER=1 npx playwright test --config=playwright.config.ts"
+}

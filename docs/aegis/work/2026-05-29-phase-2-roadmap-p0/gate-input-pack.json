@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/phase-2-roadmap.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/impact-statement-draft.json",
+  "compatPlan": "Compatibility boundary not yet refined.",
+  "retirementPlan": "Temporary duplicated lock implementation should retire into shared runtime core during roadmap architecture convergence.",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-05-29-phase-2-roadmap-p0/evidence-bundle-draft-p0-verification.json"
+  ]
+}

@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --surface: 18 19 25;
+  --surface-dim: 14 15 20;
+  --surface-container-low: 25 27 34;
+  --surface-container: 31 33 41;
+  --surface-container-high: 38 40 50;
+  --surface-variant: 67 71 83;
+  --outline: 139 144 160;
+  --outline-variant: 67 71 83;
+  --text: 230 226 236;
+  --muted: 199 197 208;
+  --primary: 168 199 250;
+  --on-primary: 6 48 95;
+  --primary-container: 36 71 115;
+  --on-primary-container: 211 227 255;
+  --secondary-container: 63 72 88;
+  --on-secondary-container: 219 226 241;
+  --tertiary: 246 183 197;
+  --tertiary-container: 102 65 77;
+  --error: 255 180 171;
+  --on-error: 105 0 5;
+  --error-container: 147 0 10;
+  --success: 154 219 173;
+  --warn: 239 196 113;
+  --shadow: 0 0 0;
+  --panel: var(--surface-container);
+  --panel-2: var(--surface-container-high);
+  --line: var(--outline-variant);
+  --accent: var(--primary);
+}
+
+.light {
+  color-scheme: light;
+  --surface: 248 249 255;
+  --surface-dim: 216 218 226;
+  --surface-container-low: 242 243 250;
+  --surface-container: 236 238 245;
+  --surface-container-high: 230 232 240;
+  --surface-variant: 224 226 236;
+  --outline: 116 119 129;
+  --outline-variant: 196 199 210;
+  --text: 25 28 34;
+  --muted: 70 72 81;
+  --primary: 43 92 154;
+  --on-primary: 255 255 255;
+  --primary-container: 211 227 255;
+  --on-primary-container: 1 30 63;
+  --secondary-container: 219 226 241;
+  --on-secondary-container: 49 57 71;
+  --tertiary: 127 81 96;
+  --tertiary-container: 255 217 226;
+  --error: 186 26 26;
+  --on-error: 255 255 255;
+  --error-container: 255 218 214;
+  --success: 34 114 69;
+  --warn: 112 83 0;
+  --shadow: 25 28 34;
+  --panel: var(--surface-container);
+  --panel-2: var(--surface-container-high);
+  --line: var(--outline-variant);
+  --accent: var(--primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--primary), 0.18), transparent 32rem),
+    linear-gradient(180deg, rgb(var(--surface)), rgb(var(--surface-dim)));
+  color: rgb(var(--text));
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  letter-spacing: 0;
+}
+
+.light body {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--primary), 0.14), transparent 34rem),
+    linear-gradient(180deg, rgb(var(--surface)), rgb(var(--surface-container-low)));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  letter-spacing: 0;
+}
+
+:where(button, [href], input, select, textarea):focus-visible {
+  outline: 2px solid rgb(var(--primary));
+  outline-offset: 3px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--outline), 0.55);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: rgba(var(--primary), 0.28);
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+  50% {
+    transform: translateX(75%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

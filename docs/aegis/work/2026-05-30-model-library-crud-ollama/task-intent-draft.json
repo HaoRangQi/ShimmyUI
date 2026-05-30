@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Make model download simple through searchable GGUF catalog, managed model CRUD, and dedicated Ollama start/search/pull/delete controls.",
+  "goal": "Users can search/select downloadable models, manage installed models, and operate Ollama from a dedicated card without manual downloads.",
+  "successEvidence": [
+    "Core tests, API contract tests, page tests, full tests, typecheck, lint, build, E2E, and browser verification show searchable catalog, managed delete, Ollama start/search/pull/delete controls."
+  ],
+  "stopCondition": "Done when model acquisition and CRUD workflows are implemented and verified; blocked only by repeated external dependency impasse; scope-exceeded if implementing full remote registry crawling.",
+  "nonGoals": [
+    "Full web-wide model registry crawling and arbitrary Hugging Face search."
+  ],
+  "scope": "Catalog search/list, managed model delete, Ollama recommended search, custom pull, local model delete, start Ollama, UI integration, tests, docs evidence.",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": [
+    "Model acquisition must remain compatible: Shimmy GGUF cannot be confused with Ollama packages."
+  ]
+}

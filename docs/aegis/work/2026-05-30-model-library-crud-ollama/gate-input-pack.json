@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/phase-2-roadmap.md",
+    "docs/aegis/plans/2026-05-29-model-library-downloads.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-05-30-model-library-crud-ollama/impact-statement-draft.json",
+  "compatPlan": "Existing /api/shimmy/* and config shape remain unchanged; Ollama packages are not registered as Shimmy GGUF models.",
+  "retirementPlan": "manual local import remains supported; no old model operations removed",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-05-30-model-library-crud-ollama/evidence-bundle-draft-verification-2026-05-30-final.json",
+    "docs/aegis/work/2026-05-30-model-library-crud-ollama/evidence-bundle-draft-verification-2026-05-30.json"
+  ]
+}
