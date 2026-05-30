@@ -22,6 +22,15 @@ const bodySchema = z.object({
   async: z.boolean().optional(),
 });
 
+async function restartManagedShimmyIfRunning() {
+  if (!shimmyProcessManager.pid) return;
+  const config = await configStore.read();
+  const detection = await detectShimmyBinary(config);
+  if (!detection.selected) return;
+  await shimmyProcessManager.stop();
+  await shimmyProcessManager.start(detection.selected, config);
+}
+
 export async function POST(request: Request) {
   const body = bodySchema.safeParse(await request.json().catch(() => ({})));
   if (!body.success) {
@@ -51,18 +60,18 @@ export async function POST(request: Request) {
 
     const config = await configStore.read();
     const detection = await detectShimmyBinary(config);
-    return NextResponse.json(
-      await downloadHuggingFaceGguf({
-        repoId: body.data.repoId,
-        fileName: selected.name,
-        downloadUrl: selected.downloadUrl,
-        readConfig: async () => config,
-        writeConfig: (next) => configStore.write(next),
-        probeModel: detection.selected
-          ? (modelName) => shimmyProcessManager.probe(detection.selected!, modelName)
-          : undefined,
-      }),
-    );
+    const result = await downloadHuggingFaceGguf({
+      repoId: body.data.repoId,
+      fileName: selected.name,
+      downloadUrl: selected.downloadUrl,
+      readConfig: () => configStore.read(),
+      writeConfig: (next) => configStore.write(next),
+      probeModel: detection.selected
+        ? (modelName) => shimmyProcessManager.probe(detection.selected!, modelName)
+        : undefined,
+    });
+    await restartManagedShimmyIfRunning().catch(() => undefined);
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       {
@@ -116,7 +125,7 @@ async function runHuggingFaceDownloadJob(jobId: string, repoId: string, fileName
       repoId,
       fileName: selected.name,
       downloadUrl: selected.downloadUrl,
-      readConfig: async () => config,
+      readConfig: () => configStore.read(),
       writeConfig: (next) => configStore.write(next),
       probeModel: detection.selected
         ? (modelName) => shimmyProcessManager.probe(detection.selected!, modelName)
@@ -129,6 +138,7 @@ async function runHuggingFaceDownloadJob(jobId: string, repoId: string, fileName
         });
       },
     });
+    await restartManagedShimmyIfRunning().catch(() => undefined);
     completeDownloadJob(jobId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Download failed";

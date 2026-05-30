@@ -36,6 +36,11 @@ type ProgressAccess = {
   onProgress?: (progress: ModelDownloadProgress) => void;
 };
 
+type ModelDirSyncResult = {
+  updated: boolean;
+  addedDirs: string[];
+};
+
 function defaultShimmyUiHome() {
   return process.env.SHIMMY_UI_HOME || path.join(os.homedir(), ".shimmy-ui");
 }
@@ -76,18 +81,43 @@ async function readManagedModelByName(name: string, shimmyUiHome = defaultShimmy
   return models.find((model) => model.name === name);
 }
 
+function uniqueNormalizedDirs(dirs: string[]) {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const dir of dirs) {
+    const trimmed = dir.trim();
+    if (!trimmed) continue;
+    const normalized = path.resolve(trimmed);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    unique.push(trimmed);
+  }
+  return unique;
+}
+
+async function ensureModelDirsRegistered(
+  { readConfig, writeConfig }: ConfigAccess,
+  candidateDirs: string[],
+): Promise<ModelDirSyncResult> {
+  if (!readConfig || !writeConfig) return { updated: false, addedDirs: [] };
+  const config = await readConfig();
+  const existing = new Set(config.modelDirs.map((dir) => path.resolve(dir)));
+  const addedDirs = uniqueNormalizedDirs(candidateDirs).filter((dir) => !existing.has(path.resolve(dir)));
+  if (addedDirs.length === 0) return { updated: false, addedDirs: [] };
+  await writeConfig({
+    ...config,
+    modelDirs: [...addedDirs, ...config.modelDirs],
+  });
+  return { updated: true, addedDirs };
+}
+
 async function ensureManagedDirRegistered(
   { readConfig, writeConfig }: ConfigAccess,
   shimmyUiHome = defaultShimmyUiHome,
-) {
-  if (!readConfig || !writeConfig) return;
+  requiredDirs: string[] = [],
+): Promise<ModelDirSyncResult> {
   const managedDir = managedModelsDir(shimmyUiHome);
-  const config = await readConfig();
-  if (config.modelDirs.includes(managedDir)) return;
-  await writeConfig({
-    ...config,
-    modelDirs: [managedDir, ...config.modelDirs],
-  });
+  return ensureModelDirsRegistered({ readConfig, writeConfig }, [managedDir, ...requiredDirs]);
 }
 
 async function recordManagedModel(model: ManagedModel, shimmyUiHome = defaultShimmyUiHome) {
@@ -112,11 +142,24 @@ async function assertShimmyProbe(
   probeModel?: ProbeAccess["probeModel"],
 ) {
   if (!probeModel) return;
-  const result = await probeModel(modelName);
-  if (!result.ok) {
-    const output = result.output ? `: ${result.output}` : "";
-    throw new Error(`Shimmy probe failed for ${modelName}${output}`);
+  const stripped = modelName.replace(/\.gguf$/i, "");
+  const candidates = Array.from(
+    new Set([modelName, stripped, stripped.replace(/_/g, "-")].filter((item) => item.length > 0)),
+  );
+  let lastOutput = "";
+  for (const candidate of candidates) {
+    const result = await probeModel(candidate);
+    if (result.ok) {
+      return;
+    }
+    lastOutput = result.output ?? "";
+    const hint = lastOutput.toLowerCase();
+    if (!hint.includes("no model") && !hint.includes("not found")) {
+      break;
+    }
   }
+  const output = lastOutput ? `: ${lastOutput}` : "";
+  throw new Error(`Shimmy probe failed for ${modelName}${output}`);
 }
 
 async function removeFileIfPresent(filePath: string) {
@@ -218,6 +261,16 @@ export async function listManagedModels(shimmyUiHome = defaultShimmyUiHome) {
   return existing.filter((model): model is ManagedModel => Boolean(model));
 }
 
+export async function syncManagedModelDirsFromMetadata({
+  shimmyUiHome = defaultShimmyUiHome,
+  readConfig,
+  writeConfig,
+}: HomeAccess & ConfigAccess = {}): Promise<ModelDirSyncResult> {
+  const models = await readManagedModels(shimmyUiHome);
+  const modelDirs = models.map((model) => path.dirname(model.path));
+  return ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome, modelDirs);
+}
+
 export async function deleteManagedModel({
   name,
   shimmyUiHome = defaultShimmyUiHome,
@@ -296,7 +349,7 @@ export async function importLocalGguf({
     await removeFileIfPresent(targetPath);
     throw error;
   }
-  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome);
+  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome, [targetDir]);
   const model = await recordManagedModel(
     {
       name: path.basename(targetPath),
@@ -375,7 +428,7 @@ export async function downloadCatalogModel({
     await removeFileIfPresent(targetPath);
     throw error;
   }
-  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome);
+  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome, [targetDir]);
   const managedModel = await recordManagedModel(
     {
       name: path.basename(targetPath),
@@ -503,7 +556,7 @@ export async function downloadHuggingFaceGguf({
     throw error;
   }
 
-  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome);
+  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome, [targetDir]);
   const model = await recordManagedModel(
     {
       name: path.basename(targetPath),

@@ -1,4 +1,4 @@
-import { stat, readFile } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import type { GgufMetadata } from "./types";
 
 const ggufMagic = "GGUF";
@@ -9,14 +9,20 @@ export function isGgufBuffer(buffer: Buffer | Uint8Array) {
 }
 
 export async function readGgufMetadata(filePath: string): Promise<GgufMetadata> {
-  const [info, handle] = await Promise.all([
-    stat(filePath),
-    readFile(filePath),
-  ]);
-  if (!isGgufBuffer(handle)) {
+  const info = await stat(filePath);
+  const file = await open(filePath, "r");
+  const header = Buffer.alloc(8);
+  let bytesRead = 0;
+  try {
+    const read = await file.read(header, 0, header.length, 0);
+    bytesRead = read.bytesRead;
+  } finally {
+    await file.close();
+  }
+  if (!isGgufBuffer(header.subarray(0, bytesRead))) {
     return { path: filePath, valid: false, sizeBytes: info.size };
   }
-  const version = handle.length >= 8 ? handle.readUInt32LE(4) : undefined;
+  const version = bytesRead >= 8 ? header.readUInt32LE(4) : undefined;
   return {
     path: filePath,
     valid: true,

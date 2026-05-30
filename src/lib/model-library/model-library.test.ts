@@ -12,6 +12,7 @@ import {
   listManagedModels,
   managedModelsDir,
   renameManagedModel,
+  syncManagedModelDirsFromMetadata,
 } from "./model-store";
 import {
   deleteOllamaModel,
@@ -183,6 +184,36 @@ describe("model library core", () => {
     expect(result.model.path).toMatch(/tiny-model\.gguf$/);
     expect(await readFile(result.model.path)).toEqual(ggufFixture);
     expect(config.modelDirs).toContain(managedModelsDir(() => home));
+    expect(config.modelDirs).toContain(path.join(home, "models", "imported"));
+  });
+
+  it("retries Shimmy probe with normalized managed model names", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "shimmy-ui-model-home-"));
+    const sourceDir = await mkdtemp(path.join(os.tmpdir(), "shimmy-ui-model-source-"));
+    const source = path.join(sourceDir, "My_Q4_K_M.gguf");
+    await writeFile(source, ggufFixture);
+    let config = testConfig();
+    const probeModel = vi.fn(async (modelName: string) => {
+      if (modelName === "my-q4-k-m") return { ok: true, output: "ok" };
+      return { ok: false, output: `Error: no model ${modelName}` };
+    });
+
+    await expect(
+      importLocalGguf({
+        sourcePath: source,
+        shimmyUiHome: () => home,
+        readConfig: async () => config,
+        writeConfig: async (next) => {
+          config = next;
+          return config;
+        },
+        probeModel,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    expect(probeModel).toHaveBeenNthCalledWith(1, "my_q4_k_m.gguf");
+    expect(probeModel).toHaveBeenNthCalledWith(2, "my_q4_k_m");
+    expect(probeModel).toHaveBeenNthCalledWith(3, "my-q4-k-m");
   });
 
   it("deletes managed model files and clears matching metadata", async () => {
@@ -309,6 +340,7 @@ describe("model library core", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://example.test/tiny.gguf", expect.any(Object));
     expect(result.model.path).toMatch(/tiny\.gguf$/);
     expect(config.modelDirs).toContain(managedModelsDir(() => home));
+    expect(config.modelDirs).toContain(path.join(home, "models", "catalog"));
     await expect(listManagedModels(() => home)).resolves.toEqual([
       expect.objectContaining({ name: "tiny.gguf" }),
     ]);
@@ -350,6 +382,7 @@ describe("model library core", () => {
     expect(result.model.source).toBe("huggingface");
     expect(result.model.path).toContain(path.join(home, "models", "huggingface"));
     expect(config.modelDirs).toContain(managedModelsDir(() => home));
+    expect(config.modelDirs).toContain(path.join(home, "models", "huggingface"));
     expect(progress.some((item) => item.phase === "downloading")).toBe(true);
     expect(progress.some((item) => item.phase === "validating")).toBe(true);
     expect(progress.some((item) => item.phase === "done")).toBe(true);
@@ -459,6 +492,47 @@ describe("model library core", () => {
 
     await expect(readFile(result.model.path)).resolves.toEqual(ggufFixture);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs legacy managed model directories from metadata paths", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "shimmy-ui-model-home-"));
+    const legacyDir = path.join(home, "models", "huggingface");
+    const legacyPath = path.join(legacyDir, "legacy.gguf");
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(legacyPath, ggufFixture);
+    await writeFile(
+      path.join(home, "models", "models.json"),
+      `${JSON.stringify(
+        [
+          {
+            name: "legacy.gguf",
+            path: legacyPath,
+            sizeBytes: ggufFixture.length,
+            source: "huggingface",
+            importedAt: "2026-05-30T00:00:00.000Z",
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+    );
+
+    let config = {
+      ...testConfig(),
+      modelDirs: [path.join(home, "models")],
+    };
+    const sync = await syncManagedModelDirsFromMetadata({
+      shimmyUiHome: () => home,
+      readConfig: async () => config,
+      writeConfig: async (next) => {
+        config = next;
+        return config;
+      },
+    });
+
+    expect(sync.updated).toBe(true);
+    expect(sync.addedDirs).toContain(path.join(home, "models", "huggingface"));
+    expect(config.modelDirs).toContain(path.join(home, "models", "huggingface"));
   });
 
   it("keeps partial file when transfer stage fails to allow next resume", async () => {
