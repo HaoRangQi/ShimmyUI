@@ -48,3 +48,4 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-30 | artifact | docs/aegis/work/2026-05-30-model-library-crud-ollama/gate-input-pack.json | 2026-05-30-model-library-crud-ollama gate input pack |
 | 2026-05-30 | work | docs/aegis/work/2026-05-30-model-library-crud-ollama/proof-bundle.md | 2026-05-30-model-library-crud-ollama proof bundle |
 | 2026-05-30 | artifact | docs/aegis/work/2026-05-30-model-library-crud-ollama/evidence-bundle-draft-verification-2026-05-30-final.json | 2026-05-30-model-library-crud-ollama evidence verification-2026-05-30-final |
+| 2026-05-30 | doc | docs/model-download-reliability.md | Model download reliability and resume/governance notes |

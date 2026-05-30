@@ -95,24 +95,27 @@ export function Snackbar({
   title,
   description,
   onDismiss,
+  className,
 }: {
   kind: "success" | "error" | "info";
   title: string;
   description?: string;
   onDismiss: () => void;
+  className?: string;
 }) {
   return (
     <div
       role={kind === "error" ? "alert" : "status"}
       aria-live={kind === "error" ? "assertive" : "polite"}
       className={cn(
-        "fixed bottom-4 right-4 z-50 grid max-w-md gap-2 rounded-[24px] border p-4 pr-12 text-sm shadow-material",
+        "fixed left-3 right-3 top-4 z-[120] grid gap-2 rounded-[24px] border p-4 pr-12 text-sm shadow-material sm:left-auto sm:right-4 sm:w-full sm:max-w-md",
         kind === "error" &&
           "border-[rgb(var(--error))]/30 bg-[rgb(var(--error-container))] text-[rgb(var(--error))]",
         kind === "success" &&
           "border-[rgb(var(--success))]/25 bg-[rgb(var(--surface-container-high))] text-[rgb(var(--text))]",
         kind === "info" &&
           "border-[rgb(var(--primary))]/25 bg-[rgb(var(--surface-container-high))] text-[rgb(var(--text))]",
+        className,
       )}
     >
       <div className="font-semibold">{title}</div>

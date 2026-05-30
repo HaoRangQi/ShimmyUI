@@ -22,9 +22,29 @@ export interface ManagedModel {
   name: string;
   path: string;
   sizeBytes: number;
-  source: "catalog" | "local" | "ollama";
+  source: "catalog" | "local" | "ollama" | "huggingface";
   catalogId?: string;
+  huggingFaceRepoId?: string;
+  huggingFaceFile?: string;
   importedAt: string;
+}
+
+export type HuggingFaceSearchSort = "trending" | "downloads" | "updated";
+
+export interface HuggingFaceModel {
+  repoId: string;
+  downloads?: number;
+  likes?: number;
+  lastModified?: string;
+  ggufFileCount?: number;
+  tags: string[];
+}
+
+export interface HuggingFaceModelFile {
+  name: string;
+  sizeBytes?: number;
+  quantization?: string;
+  downloadUrl: string;
 }
 
 export interface GgufMetadata {

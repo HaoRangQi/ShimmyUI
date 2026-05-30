@@ -20,6 +20,7 @@ vibe by codex， 让我们谢谢 codex。
 - 提供 2 条模型下载通道，并带兼容性控制：
   - Curated GGUF catalog（`/api/model-library/catalog` + `/api/model-library/download`）：仅允许 checksum 校验通过且标记兼容的模型安装。
   - Ollama Bridge（`/api/model-library/ollama/*`）：通过 Ollama 拉取后会再次校验是否满足 `GGUF + completion`，不兼容会自动删除。
+- Hugging Face 下载任务支持进度可视化（phase、百分比、`已下载 / 总大小`、ETA）、页面刷新后恢复显示、同文件并发下载锁与断点续传（服务端支持 `Range` 时）。
 - 提供可选登录页鉴权（`/login`），会话使用 HttpOnly Cookie。
 - 本地 UI 配置默认存储在 `~/.shimmy-ui/config.json`。
 - Runtime 元数据默认存储在 `~/.shimmy-ui/runtime.json`。
@@ -104,6 +105,7 @@ docker compose up -d --build
 - `SHIMMY_UI_CONFIG_PATH`：UI 配置文件路径。
 - `SHIMMY_UI_RUNTIME_PATH`：runtime 元数据路径。
 - `SHIMMY_UI_OLLAMA_BASE_URL`：外部 Ollama 地址（默认 `http://127.0.0.1:11434`）。
+- `SHIMMY_UI_HOME/download-jobs/*.json`：模型下载任务状态持久化文件（自动清理）。
 - `SHIMMY_UI_USERNAME`：登录用户名（生产/服务器模式必填）。
 - `SHIMMY_UI_PASSWORD`：登录密码（生产/服务器模式必填）。
 - `SHIMMY_UI_SESSION_SECRET`：可选，会话签名密钥。

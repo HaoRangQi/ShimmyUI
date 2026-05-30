@@ -205,6 +205,17 @@ function backupName(version) {
     .replace(/[:.]/g, "-")}${platform() === "win32" ? ".exe" : ""}`;
 }
 
+function normalizeVersionForCompare(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const semverMatch = text.match(/v?\d+\.\d+\.\d+(?:[-+][0-9a-z.-]+)?/i);
+  if (semverMatch) {
+    return semverMatch[0].replace(/^v/i, "").toLowerCase();
+  }
+  return text.replace(/^v/i, "").toLowerCase();
+}
+
 export function createRuntimeManager({
   readConfig,
   writeConfig,
@@ -258,6 +269,13 @@ export function createRuntimeManager({
     const managedCandidate = await candidate(managedPath);
     const installed = managedCandidate.exists;
     const latestVersion = release.error ? null : release.tagName;
+    const installedVersion = meta.installedVersion || null;
+    const updateAvailable = Boolean(
+      installed &&
+        latestVersion &&
+        installedVersion &&
+        normalizeVersionForCompare(installedVersion) !== normalizeVersionForCompare(latestVersion),
+    );
     const installedByUi =
       installed && (config.shimmyPath === managedPath || meta.managedPath === managedPath);
     return {
@@ -265,15 +283,13 @@ export function createRuntimeManager({
       installed,
       installedByUi,
       currentVersion: managedCandidate.version || meta.installedVersion || null,
-      installedVersion: meta.installedVersion || null,
+      installedVersion,
       installedDigest: meta.installedDigest || null,
       installedAssetName: meta.installedAssetName || null,
       installedAt: meta.installedAt || null,
       latestRelease: release.error ? null : release,
       releaseError: release.error || null,
-      updateAvailable: Boolean(
-        installed && latestVersion && meta.installedVersion && meta.installedVersion !== latestVersion,
-      ),
+      updateAvailable,
       downloads: meta.downloads || [],
       backups: meta.backups || [],
       canUninstall: installedByUi,
@@ -341,6 +357,28 @@ export function createRuntimeManager({
     return { ok: true, managedPath, installedVersion: nextMeta.installedVersion, backup };
   }
 
+  async function updateRuntimeUnlocked() {
+    const [meta, release] = await Promise.all([
+      readRuntimeMeta(),
+      latestShimmyRelease({ refresh: true }),
+    ]);
+    const managedPath = managedBinaryPath();
+    const managedCandidate = await candidate(managedPath);
+    if (!managedCandidate.exists) {
+      throw new Error("No managed Shimmy runtime is installed");
+    }
+
+    const installedVersion = meta.installedVersion;
+    if (
+      installedVersion &&
+      normalizeVersionForCompare(installedVersion) === normalizeVersionForCompare(release.tagName)
+    ) {
+      throw new Error(`Shimmy is already on the latest version (${release.tagName})`);
+    }
+
+    return installRuntimeUnlocked();
+  }
+
   async function uninstallRuntimeUnlocked() {
     const meta = await readRuntimeMeta();
     const config = await readConfig();
@@ -403,7 +441,7 @@ export function createRuntimeManager({
     downloadRuntime: () => withRuntimeOperationLock("download", downloadRuntimeUnlocked),
     installRuntime: ({ useExistingDownload = false } = {}) =>
       withRuntimeOperationLock("install", () => installRuntimeUnlocked({ useExistingDownload })),
-    updateRuntime: () => withRuntimeOperationLock("update", () => installRuntimeUnlocked()),
+    updateRuntime: () => withRuntimeOperationLock("update", updateRuntimeUnlocked),
     uninstallRuntime: () => withRuntimeOperationLock("uninstall", uninstallRuntimeUnlocked),
     rollbackRuntime: (backupPath) =>
       withRuntimeOperationLock("rollback", () => rollbackRuntimeUnlocked(backupPath)),

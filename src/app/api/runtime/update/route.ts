@@ -10,6 +10,9 @@ export async function POST() {
     if (error instanceof RuntimeOperationBusyError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 409 });
     }
+    if (error instanceof Error && error.message.toLowerCase().includes("already on the latest version")) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 409 });
+    }
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Update failed" },
       { status: 500 },

@@ -20,6 +20,7 @@ Local Web UI for managing and operating a Shimmy inference server.
 - Provides two model download channels with compatibility controls:
   - Curated GGUF catalog (`/api/model-library/catalog` + `/api/model-library/download`): only checksum-verified and Shimmy-compatible entries are installable.
   - Ollama Bridge (`/api/model-library/ollama/*`): pulls through Ollama API, then verifies the model is GGUF + `completion`; incompatible pulls are auto-removed.
+- Hugging Face downloads support live progress (phase, percent, downloaded/total, ETA), refresh-safe job recovery, same-file concurrency lock, and resume from partial data when the server supports `Range`.
 - Optional login page auth (`/login`) for server deployments, with HttpOnly cookie session.
 - Stores local UI settings in `~/.shimmy-ui/config.json` by default.
 - Stores managed runtime metadata under `~/.shimmy-ui/runtime.json`.
@@ -108,6 +109,7 @@ By default only UI port is published. If you need to expose Shimmy API port
 - `SHIMMY_UI_CONFIG_PATH`: UI config file path.
 - `SHIMMY_UI_RUNTIME_PATH`: runtime metadata file path.
 - `SHIMMY_UI_OLLAMA_BASE_URL`: external Ollama base URL (default `http://127.0.0.1:11434`).
+- `SHIMMY_UI_HOME/download-jobs/*.json`: persisted model download job snapshots (auto-pruned).
 - `SHIMMY_UI_USERNAME`: login username (required in production/server mode).
 - `SHIMMY_UI_PASSWORD`: login password (required in production/server mode).
 - `SHIMMY_UI_SESSION_SECRET`: optional session signing secret.

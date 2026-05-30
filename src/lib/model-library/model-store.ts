@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
+import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { defaultConfig } from "@/lib/shimmy/config";
 import type { ShimmyUiConfig } from "@/lib/shimmy/types";
 import { readGgufMetadata } from "./gguf";
@@ -18,6 +22,18 @@ type HomeAccess = {
 
 type ProbeAccess = {
   probeModel?: (modelName: string) => Promise<{ ok: boolean; output: string }>;
+};
+
+export type ModelDownloadPhase = "downloading" | "validating" | "probing" | "done";
+
+export type ModelDownloadProgress = {
+  phase: ModelDownloadPhase;
+  downloadedBytes: number;
+  totalBytes?: number;
+};
+
+type ProgressAccess = {
+  onProgress?: (progress: ModelDownloadProgress) => void;
 };
 
 function defaultShimmyUiHome() {
@@ -107,6 +123,86 @@ async function removeFileIfPresent(filePath: string) {
   await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
   });
+}
+
+function parseContentLength(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
+
+function parseContentRangeTotal(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const match = value.match(/\/(\d+)$/);
+  if (!match?.[1]) return undefined;
+  const total = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(total) || total <= 0) return undefined;
+  return total;
+}
+
+async function fileSizeIfPresent(filePath: string) {
+  try {
+    const info = await stat(filePath);
+    return info.isFile() ? info.size : 0;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
+}
+
+async function streamResponseToFile({
+  response,
+  tempPath,
+  hash,
+  onProgress,
+  append = false,
+  initialDownloadedBytes = 0,
+  totalBytes: providedTotalBytes,
+}: {
+  response: Response;
+  tempPath: string;
+  hash?: ReturnType<typeof createHash>;
+  append?: boolean;
+  initialDownloadedBytes?: number;
+  totalBytes?: number;
+} & ProgressAccess) {
+  if (!response.body) {
+    throw new Error("Model download failed: response body is empty");
+  }
+  const contentRangeTotal = parseContentRangeTotal(response.headers.get("content-range"));
+  const contentLength = parseContentLength(response.headers.get("content-length"));
+  const totalBytes =
+    providedTotalBytes ??
+    contentRangeTotal ??
+    (typeof contentLength === "number" ? initialDownloadedBytes + contentLength : undefined);
+  let downloadedBytes = initialDownloadedBytes;
+  let lastReportedBytes = downloadedBytes;
+  let lastReportedAt = 0;
+  onProgress?.({ phase: "downloading", downloadedBytes, totalBytes });
+
+  const counter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      downloadedBytes += chunk.length;
+      hash?.update(chunk);
+      const now = Date.now();
+      const advancedBytes = downloadedBytes - lastReportedBytes;
+      if (advancedBytes >= 4 * 1024 * 1024 || now - lastReportedAt >= 800) {
+        onProgress?.({ phase: "downloading", downloadedBytes, totalBytes });
+        lastReportedBytes = downloadedBytes;
+        lastReportedAt = now;
+      }
+      callback(null, chunk);
+    },
+  });
+
+  await pipeline(
+    Readable.fromWeb(response.body as unknown as NodeReadableStream<Uint8Array>),
+    counter,
+    createWriteStream(tempPath, { flags: append ? "a" : "w" }),
+  );
+  onProgress?.({ phase: "downloading", downloadedBytes, totalBytes });
+  return { downloadedBytes, totalBytes };
 }
 
 export async function listManagedModels(shimmyUiHome = defaultShimmyUiHome) {
@@ -221,12 +317,14 @@ export async function downloadCatalogModel({
   writeConfig,
   probeModel,
   fetchImpl = fetch,
+  onProgress,
 }: {
   model: CatalogModel;
   fetchImpl?: typeof fetch;
 } & HomeAccess &
   ConfigAccess &
-  ProbeAccess) {
+  ProbeAccess &
+  ProgressAccess) {
   if (model.compatibility.format !== "gguf" || !model.compatibility.shimmyProbeKnownGood) {
     throw new Error("Catalog model is not marked as Shimmy-compatible GGUF");
   }
@@ -239,22 +337,39 @@ export async function downloadCatalogModel({
   if (!response.ok) {
     throw new Error(`Model download failed: ${response.status} ${response.statusText}`);
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const actual = createHash("sha256").update(buffer).digest("hex");
-  if (model.sha256 && actual !== model.sha256.toLowerCase()) {
-    throw new Error(`Model checksum mismatch: expected ${model.sha256}, got ${actual}`);
-  }
   const tempDir = path.join(managedModelsDir(shimmyUiHome), ".downloads");
   const targetDir = path.join(managedModelsDir(shimmyUiHome), "catalog");
   await mkdir(tempDir, { recursive: true });
   await mkdir(targetDir, { recursive: true });
   const tempPath = path.join(tempDir, `${model.id}.partial`);
   const targetPath = path.join(targetDir, safeModelFileName(model.id));
-  await writeFile(tempPath, buffer);
-  await assertGguf(tempPath);
-  await rename(tempPath, targetPath);
+  let downloadedBytes = 0;
+
+  try {
+    const sha256 = createHash("sha256");
+    const download = await streamResponseToFile({
+      response,
+      tempPath,
+      hash: sha256,
+      onProgress,
+    });
+    downloadedBytes = download.downloadedBytes;
+    const actual = sha256.digest("hex");
+    if (model.sha256 && actual !== model.sha256.toLowerCase()) {
+      throw new Error(`Model checksum mismatch: expected ${model.sha256}, got ${actual}`);
+    }
+
+    onProgress?.({ phase: "validating", downloadedBytes, totalBytes: download.totalBytes });
+    await assertGguf(tempPath);
+    await rename(tempPath, targetPath);
+  } catch (error) {
+    await removeFileIfPresent(tempPath);
+    throw error;
+  }
+
   const info = await stat(targetPath);
   try {
+    onProgress?.({ phase: "probing", downloadedBytes: info.size, totalBytes: info.size });
     await assertShimmyProbe(path.basename(targetPath), probeModel);
   } catch (error) {
     await removeFileIfPresent(targetPath);
@@ -272,7 +387,138 @@ export async function downloadCatalogModel({
     },
     shimmyUiHome,
   );
+  onProgress?.({ phase: "done", downloadedBytes: info.size, totalBytes: info.size });
   return { ok: true, model: managedModel };
+}
+
+export async function downloadHuggingFaceGguf({
+  repoId,
+  fileName,
+  downloadUrl,
+  shimmyUiHome = defaultShimmyUiHome,
+  readConfig = async () => defaultConfig,
+  writeConfig,
+  probeModel,
+  fetchImpl = fetch,
+  onProgress,
+}: {
+  repoId: string;
+  fileName: string;
+  downloadUrl: string;
+  fetchImpl?: typeof fetch;
+} & HomeAccess &
+  ConfigAccess &
+  ProbeAccess &
+  ProgressAccess) {
+  const tempDir = path.join(managedModelsDir(shimmyUiHome), ".downloads");
+  const targetDir = path.join(managedModelsDir(shimmyUiHome), "huggingface");
+  await mkdir(tempDir, { recursive: true });
+  await mkdir(targetDir, { recursive: true });
+
+  const tempName = safeModelFileName(`${repoId.replace(/[\\/]+/g, "--")}-${path.basename(fileName)}`);
+  const tempPath = path.join(tempDir, `${tempName}.partial`);
+  const targetPath = path.join(
+    targetDir,
+    safeModelFileName(`${repoId.replace(/[\\/]+/g, "--")}-${path.basename(fileName)}`),
+  );
+  let downloadedBytes = 0;
+  let totalBytes: number | undefined;
+
+  const requestDownload = (offset?: number) =>
+    fetchImpl(downloadUrl, {
+      headers: {
+        "user-agent": "shimmy-ui",
+        ...(offset && offset > 0 ? { range: `bytes=${offset}-` } : {}),
+      },
+    });
+
+  let resumeFromBytes = await fileSizeIfPresent(tempPath);
+  let response = await requestDownload(resumeFromBytes > 0 ? resumeFromBytes : undefined);
+  let append = false;
+  let initialDownloadedBytes = 0;
+  let skipTransfer = false;
+
+  if (resumeFromBytes > 0) {
+    if (response.status === 206) {
+      append = true;
+      initialDownloadedBytes = resumeFromBytes;
+      totalBytes =
+        parseContentRangeTotal(response.headers.get("content-range")) ??
+        (parseContentLength(response.headers.get("content-length")) ?? 0) + resumeFromBytes;
+    } else if (response.status === 200) {
+      append = false;
+      initialDownloadedBytes = 0;
+      totalBytes = parseContentLength(response.headers.get("content-length"));
+    } else if (response.status === 416) {
+      const remoteTotal = parseContentRangeTotal(response.headers.get("content-range"));
+      if (remoteTotal && remoteTotal === resumeFromBytes) {
+        skipTransfer = true;
+        downloadedBytes = resumeFromBytes;
+        totalBytes = remoteTotal;
+        onProgress?.({ phase: "downloading", downloadedBytes, totalBytes });
+      } else {
+        await removeFileIfPresent(tempPath);
+        resumeFromBytes = 0;
+        response = await requestDownload();
+      }
+    }
+  }
+
+  if (!skipTransfer && !response.ok) {
+    throw new Error(`Model download failed: ${response.status} ${response.statusText}`);
+  }
+
+  let stage: "transfer" | "validation" | "finalize" = skipTransfer ? "validation" : "transfer";
+  try {
+    if (!skipTransfer) {
+      const download = await streamResponseToFile({
+        response,
+        tempPath,
+        onProgress,
+        append,
+        initialDownloadedBytes,
+        totalBytes,
+      });
+      downloadedBytes = download.downloadedBytes;
+      totalBytes = download.totalBytes;
+      stage = "validation";
+    }
+    onProgress?.({ phase: "validating", downloadedBytes, totalBytes });
+    await assertGguf(tempPath);
+    stage = "finalize";
+    await rename(tempPath, targetPath);
+  } catch (error) {
+    if (stage !== "transfer") {
+      await removeFileIfPresent(tempPath);
+    }
+    throw error;
+  }
+
+  const info = await stat(targetPath);
+  try {
+    onProgress?.({ phase: "probing", downloadedBytes: info.size, totalBytes: totalBytes ?? info.size });
+    await assertShimmyProbe(path.basename(targetPath), probeModel);
+  } catch (error) {
+    await removeFileIfPresent(targetPath);
+    throw error;
+  }
+
+  await ensureManagedDirRegistered({ readConfig, writeConfig }, shimmyUiHome);
+  const model = await recordManagedModel(
+    {
+      name: path.basename(targetPath),
+      path: targetPath,
+      sizeBytes: info.size,
+      source: "huggingface",
+      catalogId: `hf:${repoId}:${fileName}`,
+      huggingFaceRepoId: repoId,
+      huggingFaceFile: fileName,
+      importedAt: new Date().toISOString(),
+    },
+    shimmyUiHome,
+  );
+  onProgress?.({ phase: "done", downloadedBytes: info.size, totalBytes: totalBytes ?? info.size });
+  return { ok: true, model };
 }
 
 export async function scanManagedModelFiles(shimmyUiHome = defaultShimmyUiHome) {

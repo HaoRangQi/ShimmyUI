@@ -98,6 +98,56 @@ function createFetchMock() {
         ],
       });
     }
+    if (url.startsWith("/api/model-library/huggingface/search")) {
+      return Response.json({
+        ok: true,
+        models: [
+          {
+            repoId: "unsloth/Qwen3.5-9B-GGUF",
+            downloads: 123,
+            likes: 11,
+            lastModified: "2026-05-30T00:00:00.000Z",
+            tags: ["gguf"],
+          },
+        ],
+      });
+    }
+    if (url.startsWith("/api/model-library/huggingface/files?")) {
+      return Response.json({
+        ok: true,
+        files: [
+          {
+            name: "Qwen3.5-9B-Q4_K_M.gguf",
+            quantization: "Q4_K_M",
+            sizeBytes: 12,
+            downloadUrl: "https://example.test/qwen.gguf",
+          },
+        ],
+      });
+    }
+    if (url === "/api/model-library/huggingface/download" && init?.method === "POST") {
+      return new Response(JSON.stringify({ ok: true, jobId: "job-1" }), { status: 202 });
+    }
+    if (url === "/api/model-library/huggingface/download?list=active") {
+      return Response.json({
+        ok: true,
+        jobs: [],
+      });
+    }
+    if (url.startsWith("/api/model-library/huggingface/download?jobId=")) {
+      return Response.json({
+        ok: true,
+        job: {
+          jobId: "job-1",
+          phase: "done",
+          downloadedBytes: 12,
+          totalBytes: 12,
+          startedAt: "2026-05-30T00:00:00.000Z",
+          updatedAt: "2026-05-30T00:00:01.000Z",
+          done: true,
+        },
+      });
+    }
     if (url === "/api/model-library/installed") {
       return Response.json({ ok: true, models: [] });
     }
@@ -342,5 +392,31 @@ describe("Home dashboard P0 trusted operations", () => {
       );
     });
     expect(screen.getByText("qwen2.5:1.5b")).toBeVisible();
+  });
+
+  it("shows Hugging Face GGUF download progress and completion", async () => {
+    const fetchMock = createFetchMock();
+    renderHome(fetchMock);
+    const user = userEvent.setup();
+
+    await user.click((await screen.findAllByRole("button", { name: "模型" }))[0]);
+
+    await user.click(await screen.findByRole("button", { name: "加载量化列表" }));
+    await user.click(await screen.findByRole("button", { name: "下载此 GGUF" }));
+
+    expect(await screen.findByText("模型下载完成")).toBeVisible();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/model-library/huggingface/download",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            repoId: "unsloth/Qwen3.5-9B-GGUF",
+            fileName: "Qwen3.5-9B-Q4_K_M.gguf",
+            async: true,
+          }),
+        }),
+      );
+    });
   });
 });

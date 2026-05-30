@@ -168,7 +168,11 @@ export function RuntimePanel({
             <UploadCloud size={15} />
             {activeAction === "install" ? t.operationRunning : t.install}
           </Button>
-          <Button variant="secondary" onClick={update} disabled={busy || !runtime?.installed}>
+          <Button
+            variant="secondary"
+            onClick={update}
+            disabled={busy || !runtime?.installed || !runtime?.updateAvailable}
+          >
             <UploadCloud size={15} />
             {activeAction === "update" ? t.operationRunning : t.update}
           </Button>

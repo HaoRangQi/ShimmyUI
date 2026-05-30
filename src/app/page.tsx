@@ -17,7 +17,11 @@ import type {
   DashboardTab,
   DiscoverSummary,
   GenerationSettings,
+  HuggingFaceModel,
+  HuggingFaceModelFile,
+  HuggingFaceSearchSort,
   ManagedModel,
+  ModelDownloadJob,
   OllamaCatalogModel,
   OllamaModel,
   OllamaStatus,
@@ -53,6 +57,13 @@ type ConfirmState = {
   confirmLabel: string;
   destructive?: boolean;
   onConfirm: () => void;
+};
+
+type ActiveHuggingFaceDownloadJob = {
+  jobId: string;
+  repoId: string;
+  fileName: string;
+  job: ModelDownloadJob;
 };
 
 const chatPresets: Record<ChatPresetId, GenerationSettings> = {
@@ -93,6 +104,16 @@ export default function Home() {
   const [discoverSummary, setDiscoverSummary] = useState<DiscoverSummary | null>(null);
   const [localGgufPath, setLocalGgufPath] = useState("");
   const [catalogQuery, setCatalogQuery] = useState("");
+  const [huggingFaceSort, setHuggingFaceSort] = useState<HuggingFaceSearchSort>("downloads");
+  const [huggingFaceFilesByRepo, setHuggingFaceFilesByRepo] = useState<
+    Record<string, HuggingFaceModelFile[]>
+  >({});
+  const [huggingFaceDownloadJobsByKey, setHuggingFaceDownloadJobsByKey] = useState<
+    Record<string, ModelDownloadJob>
+  >({});
+  const [huggingFaceFilesLoadingRepoId, setHuggingFaceFilesLoadingRepoId] = useState<string | null>(null);
+  const [activeHuggingFacePollJobs, setActiveHuggingFacePollJobs] = useState<string[]>([]);
+  const huggingFacePollMissesByJobIdRef = useRef<Record<string, number>>({});
   const [ollamaQuery, setOllamaQuery] = useState("");
   const [ollamaModelName, setOllamaModelName] = useState("");
   const [editingManagedModel, setEditingManagedModel] = useState<string | null>(null);
@@ -116,7 +137,7 @@ export default function Home() {
   const logs = useQuery({
     queryKey: ["logs"],
     queryFn: () => jsonFetch<{ logs: LogEntry[] }>("/api/shimmy/logs"),
-    refetchInterval: 2_000,
+    refetchInterval: tab === "logs" ? 2_000 : false,
   });
   const runtime = useQuery({
     queryKey: ["runtime"],
@@ -128,6 +149,22 @@ export default function Home() {
       jsonFetch<{ ok: boolean; models: CatalogModel[] }>(
         `/api/model-library/catalog?q=${encodeURIComponent(catalogQuery)}`,
       ),
+  });
+  const huggingFaceModels = useQuery({
+    queryKey: ["model-library", "huggingface-search", catalogQuery, huggingFaceSort],
+    queryFn: () =>
+      jsonFetch<{ ok: boolean; models: HuggingFaceModel[] }>(
+        `/api/model-library/huggingface/search?q=${encodeURIComponent(catalogQuery)}&sort=${encodeURIComponent(huggingFaceSort)}&limit=20`,
+      ),
+  });
+  const activeHuggingFaceDownloads = useQuery({
+    queryKey: ["model-library", "huggingface-downloads", "active"],
+    queryFn: () =>
+      jsonFetch<{ ok: boolean; jobs: ActiveHuggingFaceDownloadJob[] }>(
+        "/api/model-library/huggingface/download?list=active",
+      ),
+    enabled: tab === "models",
+    refetchInterval: tab === "models" ? 2_000 : false,
   });
   const managedModels = useQuery({
     queryKey: ["model-library", "installed"],
@@ -218,6 +255,78 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["logs"] });
     }
   }, [queryClient, tab]);
+
+  useEffect(() => {
+    const jobs = activeHuggingFaceDownloads.data?.jobs ?? [];
+    if (jobs.length === 0) return;
+    setHuggingFaceDownloadJobsByKey((current) => {
+      const next = { ...current };
+      for (const item of jobs) {
+        next[`${item.repoId}:${item.fileName}`] = item.job;
+      }
+      return next;
+    });
+    setActiveHuggingFacePollJobs((current) => {
+      const next = new Set(current);
+      for (const item of jobs) {
+        next.add(item.jobId);
+      }
+      return [...next];
+    });
+  }, [activeHuggingFaceDownloads.data?.jobs]);
+
+  useEffect(() => {
+    if (activeHuggingFacePollJobs.length === 0) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void Promise.all(
+        activeHuggingFacePollJobs.map(async (jobId) => {
+          const jobStatus = await jsonFetch<{ ok: boolean; job: ModelDownloadJob }>(
+            `/api/model-library/huggingface/download?jobId=${encodeURIComponent(jobId)}`,
+          ).catch(() => null);
+          if (cancelled) return;
+          if (!jobStatus?.job) {
+            const misses = (huggingFacePollMissesByJobIdRef.current[jobId] ?? 0) + 1;
+            huggingFacePollMissesByJobIdRef.current = {
+              ...huggingFacePollMissesByJobIdRef.current,
+              [jobId]: misses,
+            };
+            if (misses >= 4) {
+              setActiveHuggingFacePollJobs((jobs) => jobs.filter((id) => id !== jobId));
+              const next = { ...huggingFacePollMissesByJobIdRef.current };
+              delete next[jobId];
+              huggingFacePollMissesByJobIdRef.current = next;
+            }
+            return;
+          }
+          if (jobId in huggingFacePollMissesByJobIdRef.current) {
+            const next = { ...huggingFacePollMissesByJobIdRef.current };
+            delete next[jobId];
+            huggingFacePollMissesByJobIdRef.current = next;
+          }
+          const activeJobs = activeHuggingFaceDownloads.data?.jobs ?? [];
+          const active = activeJobs.find((item) => item.jobId === jobId);
+          if (!active) return;
+          const key = `${active.repoId}:${active.fileName}`;
+          setHuggingFaceDownloadJobsByKey((current) => ({
+            ...current,
+            [key]: jobStatus.job,
+          }));
+          if (jobStatus.job.done) {
+            setActiveHuggingFacePollJobs((current) => current.filter((id) => id !== jobId));
+            if (!jobStatus.job.error) {
+              invalidateModelLibrary(queryClient);
+            }
+          }
+        }),
+      );
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeHuggingFacePollJobs, activeHuggingFaceDownloads.data?.jobs, queryClient]);
 
   const start = useMutation({
     mutationFn: () => jsonFetch("/api/shimmy/start", { method: "POST" }),
@@ -364,6 +473,93 @@ export default function Home() {
       invalidateModelLibrary(queryClient);
     },
     onError: (error) => setSnackbar(errorToSnackbar(error, t)),
+  });
+  const loadHuggingFaceFiles = useMutation({
+    mutationFn: (repoId: string) =>
+      jsonFetch<{ ok: boolean; files: HuggingFaceModelFile[] }>(
+        `/api/model-library/huggingface/files?repoId=${encodeURIComponent(repoId)}`,
+      ),
+    onMutate: (repoId) => {
+      setHuggingFaceFilesLoadingRepoId(repoId);
+    },
+    onSuccess: (data, repoId) => {
+      setHuggingFaceFilesByRepo((current) => ({
+        ...current,
+        [repoId]: data.files,
+      }));
+    },
+    onError: (error) => setSnackbar(errorToSnackbar(error, t)),
+    onSettled: () => {
+      setHuggingFaceFilesLoadingRepoId(null);
+    },
+  });
+  const downloadHuggingFaceFile = useMutation({
+    mutationFn: async ({ repoId, fileName }: { repoId: string; fileName: string }) => {
+      const start = await jsonFetch<{ ok: boolean; jobId: string; reused?: boolean }>(
+        "/api/model-library/huggingface/download",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ repoId, fileName, async: true }),
+        },
+      );
+      const key = `${repoId}:${fileName}`;
+      setActiveHuggingFacePollJobs((current) => [...new Set([...current, start.jobId])]);
+      huggingFacePollMissesByJobIdRef.current = {
+        ...huggingFacePollMissesByJobIdRef.current,
+        [start.jobId]: 0,
+      };
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const status = await jsonFetch<{ ok: boolean; job: ModelDownloadJob }>(
+          `/api/model-library/huggingface/download?jobId=${encodeURIComponent(start.jobId)}`,
+        );
+        setHuggingFaceDownloadJobsByKey((current) => ({
+          ...current,
+          [key]: status.job,
+        }));
+        if (status.job.done) {
+          setActiveHuggingFacePollJobs((current) => current.filter((id) => id !== start.jobId));
+          const next = { ...huggingFacePollMissesByJobIdRef.current };
+          delete next[start.jobId];
+          huggingFacePollMissesByJobIdRef.current = next;
+          if (status.job.error) {
+            throw new Error(status.job.error);
+          }
+          return status.job;
+        }
+      }
+    },
+    onSuccess: (job, variables) => {
+      const key = `${variables.repoId}:${variables.fileName}`;
+      setHuggingFaceDownloadJobsByKey((current) => ({
+        ...current,
+        [key]: {
+          ...job,
+          done: true,
+          error: undefined,
+          phase: "done",
+        },
+      }));
+      setSnackbar({ kind: "success", title: t.modelDownloadComplete });
+      invalidateModelLibrary(queryClient);
+    },
+    onError: (error, variables) => {
+      const key = `${variables.repoId}:${variables.fileName}`;
+      setHuggingFaceDownloadJobsByKey((current) => {
+        const job = current[key];
+        if (!job) return current;
+        return {
+          ...current,
+          [key]: {
+            ...job,
+            done: true,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        };
+      });
+      setSnackbar(errorToSnackbar(error, t));
+    },
   });
   const renameManagedModel = useMutation({
     mutationFn: ({ name, nextName }: { name: string; nextName: string }) =>
@@ -613,6 +809,18 @@ export default function Home() {
 
   return (
     <main className="min-h-screen px-3 py-3 pb-24 sm:px-5 lg:px-6 lg:pb-3">
+      {snackbar ? (
+        <div className="sticky top-3 z-[120] mb-3 flex justify-center lg:justify-end">
+          <Snackbar
+            kind={snackbar.kind}
+            title={snackbar.title}
+            description={snackbar.description}
+            onDismiss={() => setSnackbar(null)}
+            className="static left-auto right-auto top-auto w-full max-w-xl"
+          />
+        </div>
+      ) : null}
+
       <div className="mx-auto grid max-w-[1520px] gap-5 lg:grid-cols-[268px_1fr]">
         <Sidebar
           t={t}
@@ -646,6 +854,9 @@ export default function Home() {
               modelRows={modelRows}
               defaultModel={localConfig.defaultModel}
               catalogModels={modelCatalog.data?.models ?? []}
+              huggingFaceModels={huggingFaceModels.data?.models ?? []}
+              huggingFaceFilesByRepo={huggingFaceFilesByRepo}
+              huggingFaceSort={huggingFaceSort}
               managedModels={managedModels.data?.models ?? []}
               ollamaStatus={ollamaStatus.data?.status}
               ollamaModels={ollamaModels.data?.models ?? []}
@@ -659,8 +870,15 @@ export default function Home() {
               modelLibraryPending={
                 importLocalModel.isPending ||
                 downloadCatalogModel.isPending ||
+                downloadHuggingFaceFile.isPending ||
                 deleteManagedModel.isPending ||
                 renameManagedModel.isPending
+              }
+              huggingFaceLoading={huggingFaceModels.isFetching}
+              huggingFaceFilesLoadingRepoId={huggingFaceFilesLoadingRepoId}
+              huggingFaceDownloadJobsByKey={huggingFaceDownloadJobsByKey}
+              huggingFacePending={
+                loadHuggingFaceFiles.isPending || downloadHuggingFaceFile.isPending
               }
               ollamaPending={startOllama.isPending || pullOllamaModel.isPending || deleteOllamaModel.isPending}
               modelDirsHealth={status.data?.modelDirsHealth}
@@ -669,6 +887,7 @@ export default function Home() {
               discover={() => discover.mutate()}
               setLocalGgufPath={setLocalGgufPath}
               setCatalogQuery={setCatalogQuery}
+              setHuggingFaceSort={setHuggingFaceSort}
               setOllamaQuery={setOllamaQuery}
               setOllamaModelName={setOllamaModelName}
               setEditingManagedModel={setEditingManagedModel}
@@ -678,6 +897,10 @@ export default function Home() {
                 if (modelPath) importLocalModel.mutate(modelPath);
               }}
               downloadCatalogModel={(modelId) => downloadCatalogModel.mutate(modelId)}
+              loadHuggingFaceFiles={(repoId) => loadHuggingFaceFiles.mutate(repoId)}
+              downloadHuggingFaceFile={(repoId, fileName) =>
+                downloadHuggingFaceFile.mutate({ repoId, fileName })
+              }
               deleteManagedModel={(modelName) => deleteManagedModel.mutate(modelName)}
               renameManagedModel={(modelName, nextName) =>
                 renameManagedModel.mutate({ name: modelName, nextName })
@@ -799,14 +1022,6 @@ export default function Home() {
         />
       ) : null}
 
-      {snackbar ? (
-        <Snackbar
-          kind={snackbar.kind}
-          title={snackbar.title}
-          description={snackbar.description}
-          onDismiss={() => setSnackbar(null)}
-        />
-      ) : null}
       <MobileNavigation t={t} tab={tab} setTab={setTab} />
     </main>
   );
@@ -835,6 +1050,13 @@ function errorToSnackbar(error: unknown, t: typeof dictionaries.en): SnackbarSta
       kind: "error",
       title: t.operationRunning,
       description: t.runtimeBusyAdvice,
+    };
+  }
+  if (lower.includes("already on the latest version") || lower.includes("already latest")) {
+    return {
+      kind: "info",
+      title: t.alreadyLatest,
+      description: t.alreadyLatestAdvice,
     };
   }
   if (lower.includes("checksum")) {

@@ -29,10 +29,26 @@ export interface DiscoverSummary {
   error?: string;
 }
 
+export type ModelDownloadPhase = "downloading" | "validating" | "probing" | "done";
+
+export interface ModelDownloadJob {
+  jobId: string;
+  phase: ModelDownloadPhase;
+  downloadedBytes: number;
+  totalBytes?: number;
+  startedAt: string;
+  updatedAt: string;
+  done: boolean;
+  error?: string;
+}
+
 export type LogStreamFilter = "all" | "stdout" | "stderr" | "system";
 
 export type {
   CatalogModel,
+  HuggingFaceModel,
+  HuggingFaceModelFile,
+  HuggingFaceSearchSort,
   ManagedModel,
   OllamaModel,
   OllamaStatus,

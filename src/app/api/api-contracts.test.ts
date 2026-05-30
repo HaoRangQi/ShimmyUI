@@ -10,8 +10,10 @@ describe("API contract boundaries", () => {
     vi.doUnmock("@/lib/shimmy/model-dirs");
     vi.doUnmock("@/lib/shimmy/runtime");
     vi.doUnmock("@/lib/model-library/catalog");
+    vi.doUnmock("@/lib/model-library/huggingface");
     vi.doUnmock("@/lib/model-library/model-store");
     vi.doUnmock("@/lib/model-library/ollama");
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.resetModules();
   });
@@ -38,6 +40,25 @@ describe("API contract boundaries", () => {
     expect(response.status).toBe(409);
     expect(body).toMatchObject({ ok: false });
     expect(body.error).toContain("already running");
+  });
+
+  it("returns 409 when runtime update is already on the latest version", async () => {
+    vi.doMock("@/lib/shimmy/runtime-manager", () => ({
+      RuntimeOperationBusyError: class TestRuntimeOperationBusyError extends Error {},
+      updateRuntime: vi.fn(async () => {
+        throw new Error("Shimmy is already on the latest version (v1.2.3)");
+      }),
+    }));
+
+    const route = await import("./runtime/update/route");
+    const response = await route.POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      ok: false,
+      error: "Shimmy is already on the latest version (v1.2.3)",
+    });
   });
 
   it("returns 400 for invalid settings payloads", async () => {
@@ -601,6 +622,410 @@ describe("API contract boundaries", () => {
       expect.objectContaining({ path: "/tmp/shimmy" }),
       "tiny.gguf",
     );
+  });
+
+  it("searches Hugging Face GGUF repositories through model library API", async () => {
+    const searchHuggingFaceModels = vi.fn(async () => [
+      {
+        repoId: "unsloth/Qwen3.5-9B-GGUF",
+        downloads: 1234,
+        lastModified: "2026-05-30T00:00:00.000Z",
+        tags: ["gguf"],
+      },
+    ]);
+    vi.doMock("@/lib/model-library/huggingface", () => ({
+      searchHuggingFaceModels,
+    }));
+
+    const route = await import("./model-library/huggingface/search/route");
+    const response = await route.GET(
+      new Request("http://shimmy.test/api/model-library/huggingface/search?q=qwen&sort=downloads&limit=10"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(searchHuggingFaceModels).toHaveBeenCalledWith({
+      query: "qwen",
+      limit: 10,
+      sort: "downloads",
+    });
+    expect(body).toMatchObject({
+      ok: true,
+      models: [{ repoId: "unsloth/Qwen3.5-9B-GGUF" }],
+    });
+  });
+
+  it("lists Hugging Face GGUF files through model library API", async () => {
+    const listHuggingFaceGgufFiles = vi.fn(async () => [
+      {
+        name: "Qwen3.5-9B-Q4_K_M.gguf",
+        quantization: "Q4_K_M",
+        sizeBytes: 123,
+        downloadUrl: "https://huggingface.co/repo/resolve/main/file.gguf",
+      },
+    ]);
+    vi.doMock("@/lib/model-library/huggingface", () => ({
+      listHuggingFaceGgufFiles,
+    }));
+
+    const route = await import("./model-library/huggingface/files/route");
+    const response = await route.GET(
+      new Request("http://shimmy.test/api/model-library/huggingface/files?repoId=unsloth/Qwen3.5-9B-GGUF"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listHuggingFaceGgufFiles).toHaveBeenCalledWith("unsloth/Qwen3.5-9B-GGUF");
+    expect(body).toMatchObject({
+      ok: true,
+      files: [{ name: "Qwen3.5-9B-Q4_K_M.gguf" }],
+    });
+  });
+
+  it("downloads selected Hugging Face GGUF file through model library API", async () => {
+    const probe = vi.fn(async () => ({ ok: true, output: "ok" }));
+    vi.doMock("@/lib/shimmy/config-store", () => ({
+      configStore: {
+        read: vi.fn(async () => ({
+          bindAddress: "127.0.0.1:11435",
+          modelDirs: [],
+          gpuBackend: "auto",
+          language: "zh",
+          theme: "dark",
+        })),
+        write: vi.fn(async (config) => config),
+      },
+    }));
+    vi.doMock("@/lib/shimmy/binary", () => ({
+      detectShimmyBinary: vi.fn(async () => ({
+        selected: {
+          path: "/tmp/shimmy",
+          exists: true,
+          executable: true,
+          source: "configured",
+        },
+        candidates: [],
+      })),
+    }));
+    vi.doMock("@/lib/shimmy/process-manager", () => ({
+      shimmyProcessManager: { probe },
+    }));
+    vi.doMock("@/lib/model-library/huggingface", () => ({
+      listHuggingFaceGgufFiles: vi.fn(async () => [
+        {
+          name: "Qwen3.5-9B-Q4_K_M.gguf",
+          downloadUrl: "https://huggingface.co/repo/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        },
+      ]),
+    }));
+    const downloadHuggingFaceGguf = vi.fn(async ({ probeModel }) => {
+      await probeModel("qwen.gguf");
+      return {
+        ok: true,
+        model: {
+          name: "qwen.gguf",
+          path: "/tmp/qwen.gguf",
+          sizeBytes: 123,
+          source: "huggingface",
+          importedAt: "2026-05-30T00:00:00.000Z",
+        },
+      };
+    });
+    vi.doMock("@/lib/model-library/model-store", () => ({
+      downloadHuggingFaceGguf,
+    }));
+
+    const route = await import("./model-library/huggingface/download/route");
+    const response = await route.POST(
+      new Request("http://shimmy.test/api/model-library/huggingface/download", {
+        method: "POST",
+        body: JSON.stringify({
+          repoId: "unsloth/Qwen3.5-9B-GGUF",
+          fileName: "Qwen3.5-9B-Q4_K_M.gguf",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.model.source).toBe("huggingface");
+    expect(downloadHuggingFaceGguf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoId: "unsloth/Qwen3.5-9B-GGUF",
+        fileName: "Qwen3.5-9B-Q4_K_M.gguf",
+      }),
+    );
+    expect(probe).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/tmp/shimmy" }),
+      "qwen.gguf",
+    );
+  });
+
+  it("starts and polls async Hugging Face GGUF download job through model library API", async () => {
+    const probe = vi.fn(async () => ({ ok: true, output: "ok" }));
+    vi.doMock("@/lib/shimmy/config-store", () => ({
+      configStore: {
+        read: vi.fn(async () => ({
+          bindAddress: "127.0.0.1:11435",
+          modelDirs: [],
+          gpuBackend: "auto",
+          language: "zh",
+          theme: "dark",
+        })),
+        write: vi.fn(async (config) => config),
+      },
+    }));
+    vi.doMock("@/lib/shimmy/binary", () => ({
+      detectShimmyBinary: vi.fn(async () => ({
+        selected: {
+          path: "/tmp/shimmy",
+          exists: true,
+          executable: true,
+          source: "configured",
+        },
+        candidates: [],
+      })),
+    }));
+    vi.doMock("@/lib/shimmy/process-manager", () => ({
+      shimmyProcessManager: { probe },
+    }));
+    vi.doMock("@/lib/model-library/huggingface", () => ({
+      listHuggingFaceGgufFiles: vi.fn(async () => [
+        {
+          name: "Qwen3.5-9B-Q4_K_M.gguf",
+          downloadUrl: "https://huggingface.co/repo/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        },
+      ]),
+    }));
+    const downloadHuggingFaceGguf = vi.fn(async ({ onProgress, probeModel }) => {
+      onProgress?.({
+        phase: "downloading",
+        downloadedBytes: 64,
+        totalBytes: 128,
+      });
+      await probeModel("qwen.gguf");
+      onProgress?.({
+        phase: "done",
+        downloadedBytes: 128,
+        totalBytes: 128,
+      });
+      return {
+        ok: true,
+        model: {
+          name: "qwen.gguf",
+          path: "/tmp/qwen.gguf",
+          sizeBytes: 128,
+          source: "huggingface",
+          importedAt: "2026-05-30T00:00:00.000Z",
+        },
+      };
+    });
+    vi.doMock("@/lib/model-library/model-store", () => ({
+      downloadHuggingFaceGguf,
+    }));
+
+    const route = await import("./model-library/huggingface/download/route");
+    const start = await route.POST(
+      new Request("http://shimmy.test/api/model-library/huggingface/download", {
+        method: "POST",
+        body: JSON.stringify({
+          repoId: "unsloth/Qwen3.5-9B-GGUF",
+          fileName: "Qwen3.5-9B-Q4_K_M.gguf",
+          async: true,
+        }),
+      }),
+    );
+    const started = await start.json();
+    expect(start.status).toBe(202);
+    expect(started.ok).toBe(true);
+    expect(typeof started.jobId).toBe("string");
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const status = await route.GET(
+      new Request(
+        `http://shimmy.test/api/model-library/huggingface/download?jobId=${encodeURIComponent(started.jobId)}`,
+      ),
+    );
+    const body = await status.json();
+
+    expect(status.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.job.jobId).toBe(started.jobId);
+    expect(body.job.done).toBe(true);
+    expect(body.job.phase).toBe("done");
+    expect(downloadHuggingFaceGguf).toHaveBeenCalled();
+  });
+
+  it("lists active Hugging Face GGUF download jobs", async () => {
+    vi.doMock("@/lib/shimmy/config-store", () => ({
+      configStore: {
+        read: vi.fn(async () => ({
+          bindAddress: "127.0.0.1:11435",
+          modelDirs: [],
+          gpuBackend: "auto",
+          language: "zh",
+          theme: "dark",
+        })),
+        write: vi.fn(async (config) => config),
+      },
+    }));
+    vi.doMock("@/lib/shimmy/binary", () => ({
+      detectShimmyBinary: vi.fn(async () => ({
+        selected: {
+          path: "/tmp/shimmy",
+          exists: true,
+          executable: true,
+          source: "configured",
+        },
+        candidates: [],
+      })),
+    }));
+    vi.doMock("@/lib/shimmy/process-manager", () => ({
+      shimmyProcessManager: { probe: vi.fn(async () => ({ ok: true, output: "ok" })) },
+    }));
+    vi.doMock("@/lib/model-library/huggingface", () => ({
+      listHuggingFaceGgufFiles: vi.fn(async () => [
+        {
+          name: "Qwen3.5-9B-Q4_K_M.gguf",
+          downloadUrl: "https://huggingface.co/repo/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        },
+      ]),
+    }));
+    vi.doMock("@/lib/model-library/model-store", () => ({
+      downloadHuggingFaceGguf: vi.fn(
+        async ({ onProgress }: { onProgress?: (event: { phase: string; downloadedBytes: number; totalBytes?: number }) => void }) => {
+          onProgress?.({ phase: "downloading", downloadedBytes: 10, totalBytes: 100 });
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          onProgress?.({ phase: "done", downloadedBytes: 100, totalBytes: 100 });
+          return {
+            ok: true,
+            model: {
+              name: "qwen.gguf",
+              path: "/tmp/qwen.gguf",
+              sizeBytes: 100,
+              source: "huggingface",
+              importedAt: "2026-05-30T00:00:00.000Z",
+            },
+          };
+        },
+      ),
+    }));
+
+    const route = await import("./model-library/huggingface/download/route");
+    const start = await route.POST(
+      new Request("http://shimmy.test/api/model-library/huggingface/download", {
+        method: "POST",
+        body: JSON.stringify({
+          repoId: "unsloth/Qwen3.5-9B-GGUF",
+          fileName: "Qwen3.5-9B-Q4_K_M.gguf",
+          async: true,
+        }),
+      }),
+    );
+    const started = await start.json();
+    expect(start.status).toBe(202);
+    expect(started.ok).toBe(true);
+
+    const listResponse = await route.GET(
+      new Request("http://shimmy.test/api/model-library/huggingface/download?list=active"),
+    );
+    const listBody = await listResponse.json();
+    expect(listResponse.status).toBe(200);
+    expect(listBody.ok).toBe(true);
+    expect(Array.isArray(listBody.jobs)).toBe(true);
+    expect(listBody.jobs.some((item: { jobId: string }) => item.jobId === started.jobId)).toBe(true);
+  });
+
+  it("reuses active async Hugging Face download job for the same file", async () => {
+    const repoId = `unsloth/Qwen3.5-9B-GGUF-${Date.now()}`;
+    const home = `/tmp/shimmy-ui-api-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    vi.stubEnv("SHIMMY_UI_HOME", home);
+    vi.doMock("@/lib/shimmy/config-store", () => ({
+      configStore: {
+        read: vi.fn(async () => ({
+          bindAddress: "127.0.0.1:11435",
+          modelDirs: [],
+          gpuBackend: "auto",
+          language: "zh",
+          theme: "dark",
+        })),
+        write: vi.fn(async (config) => config),
+      },
+    }));
+    vi.doMock("@/lib/shimmy/binary", () => ({
+      detectShimmyBinary: vi.fn(async () => ({
+        selected: {
+          path: "/tmp/shimmy",
+          exists: true,
+          executable: true,
+          source: "configured",
+        },
+        candidates: [],
+      })),
+    }));
+    vi.doMock("@/lib/shimmy/process-manager", () => ({
+      shimmyProcessManager: { probe: vi.fn(async () => ({ ok: true, output: "ok" })) },
+    }));
+    vi.doMock("@/lib/model-library/huggingface", () => ({
+      listHuggingFaceGgufFiles: vi.fn(async () => [
+        {
+          name: "Qwen3.5-9B-Q4_K_M.gguf",
+          downloadUrl: "https://huggingface.co/repo/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        },
+      ]),
+    }));
+    const resolveDownload: Array<() => void> = [];
+    const downloadHuggingFaceGguf = vi.fn(
+      async ({ onProgress }: { onProgress?: (event: { phase: string; downloadedBytes: number; totalBytes?: number }) => void }) => {
+        onProgress?.({ phase: "downloading", downloadedBytes: 10, totalBytes: 100 });
+        await new Promise<void>((resolve) => {
+          resolveDownload.push(resolve);
+        });
+        onProgress?.({ phase: "done", downloadedBytes: 100, totalBytes: 100 });
+        return {
+          ok: true,
+          model: {
+            name: "qwen.gguf",
+            path: "/tmp/qwen.gguf",
+            sizeBytes: 100,
+            source: "huggingface",
+            importedAt: "2026-05-30T00:00:00.000Z",
+          },
+        };
+      },
+    );
+    vi.doMock("@/lib/model-library/model-store", () => ({
+      downloadHuggingFaceGguf,
+    }));
+
+    const route = await import("./model-library/huggingface/download/route");
+    const req = new Request("http://shimmy.test/api/model-library/huggingface/download", {
+      method: "POST",
+      body: JSON.stringify({
+        repoId,
+        fileName: "Qwen3.5-9B-Q4_K_M.gguf",
+        async: true,
+      }),
+    });
+
+    const first = await route.POST(req.clone());
+    const firstBody = await first.json();
+    const second = await route.POST(req.clone());
+    const secondBody = await second.json();
+
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(202);
+    expect(firstBody.ok).toBe(true);
+    expect(secondBody.ok).toBe(true);
+    expect(firstBody.reused).toBe(false);
+    expect(secondBody.reused).toBe(true);
+    expect(secondBody.jobId).toBe(firstBody.jobId);
+    expect(downloadHuggingFaceGguf).toHaveBeenCalledTimes(1);
+
+    for (const done of resolveDownload) done();
+    await new Promise((resolve) => setTimeout(resolve, 10));
   });
 
   it("returns Ollama status and models through model library APIs", async () => {
