@@ -1,5 +1,7 @@
 # Shimmy UI
 
+vibe by codex, let us thank codex.
+
 [中文](./README.md) | **English**
 
 Local Web UI for managing and operating a Shimmy inference server.

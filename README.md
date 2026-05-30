@@ -1,5 +1,7 @@
 # Shimmy UI
 
+vibe by codex， 让我们谢谢 codex。
+
 **中文** | [English](./README.en.md)
 
 用于管理和运维 Shimmy 推理服务的本地 Web UI。
