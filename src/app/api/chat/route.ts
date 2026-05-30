@@ -1,11 +1,29 @@
 import { NextResponse } from "next/server";
 import { configStore } from "@/lib/shimmy/config-store";
 import { shimmyBaseUrl } from "@/lib/shimmy/http-client";
+import { shimmyProcessManager } from "@/lib/shimmy/process-manager";
 
 export const runtime = "nodejs";
 
 const maxChatBodyBytes = 256 * 1024;
 const chatProxyTimeoutMs = Number(process.env.SHIMMY_UI_CHAT_TIMEOUT_MS ?? 30_000);
+
+function recentRuntimeFailureHint() {
+  const entries = shimmyProcessManager.logs.list().slice(-120).reverse();
+  const hit = entries.find((entry) => {
+    const lower = entry.message.toLowerCase();
+    return (
+      entry.stream === "stderr" &&
+      (lower.includes("panicked") ||
+        lower.includes("panic") ||
+        lower.includes("output.weight type not found") ||
+        lower.includes("no model") ||
+        lower.includes("missing norm tensor"))
+    );
+  });
+  if (!hit) return null;
+  return hit.message.trim().slice(0, 220);
+}
 
 export async function POST(request: Request) {
   const config = await configStore.read();
@@ -45,10 +63,24 @@ export async function POST(request: Request) {
         { status: 499 },
       );
     }
+    const raw = error instanceof Error ? error.message : "Shimmy chat request failed";
+    const lower = raw.toLowerCase();
+    if (lower.includes("fetch failed") || lower.includes("econnrefused") || lower.includes("econnreset")) {
+      const hint = recentRuntimeFailureHint();
+      return NextResponse.json(
+        {
+          ok: false,
+          error: hint
+            ? `Shimmy chat request failed: backend unreachable or model crashed. Recent runtime error: ${hint}`
+            : "Shimmy chat request failed: backend unreachable or model crashed. Check Diagnostics > Logs.",
+        },
+        { status: 502 },
+      );
+    }
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Shimmy chat request failed",
+        error: raw,
       },
       { status: 502 },
     );

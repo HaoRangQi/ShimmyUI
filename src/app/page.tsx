@@ -85,6 +85,19 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+async function readResponseErrorMessage(response: Response) {
+  const fallback = `${response.status} ${response.statusText}`.trim();
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const data = await response.json().catch(() => null);
+    if (data && typeof data === "object" && "error" in data && typeof data.error === "string") {
+      return data.error.trim() || fallback;
+    }
+  }
+  const text = await response.text().catch(() => "");
+  return text.trim() || fallback;
+}
+
 export default function Home() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<DashboardTab>("overview");
@@ -654,7 +667,10 @@ export default function Home() {
         max_tokens: generation.maxTokens,
       }),
     });
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
+      throw new Error(await readResponseErrorMessage(response));
+    }
+    if (!response.body) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
     const reader = response.body.getReader();
@@ -810,15 +826,12 @@ export default function Home() {
   return (
     <main className="min-h-screen px-3 py-3 pb-24 sm:px-5 lg:px-6 lg:pb-3">
       {snackbar ? (
-        <div className="sticky top-3 z-[120] mb-3 flex justify-center lg:justify-end">
-          <Snackbar
-            kind={snackbar.kind}
-            title={snackbar.title}
-            description={snackbar.description}
-            onDismiss={() => setSnackbar(null)}
-            className="static left-auto right-auto top-auto w-full max-w-xl"
-          />
-        </div>
+        <Snackbar
+          kind={snackbar.kind}
+          title={snackbar.title}
+          description={snackbar.description}
+          onDismiss={() => setSnackbar(null)}
+        />
       ) : null}
 
       <div className="mx-auto grid max-w-[1520px] gap-5 lg:grid-cols-[268px_1fr]">
@@ -1073,6 +1086,17 @@ function errorToSnackbar(error: unknown, t: typeof dictionaries.en): SnackbarSta
       description: t.networkFailureAdvice,
     };
   }
+  if (
+    lower.includes("bad gateway") ||
+    lower.includes("fetch failed") ||
+    lower.includes("shimmy chat request failed")
+  ) {
+    return {
+      kind: "error",
+      title: t.chatRequestFailed,
+      description: t.chatRequestFailedAdvice,
+    };
+  }
   if (lower.includes("missing") || lower.includes("not found") || lower.includes("not executable")) {
     return {
       kind: "error",
@@ -1087,7 +1111,7 @@ function errorToSnackbar(error: unknown, t: typeof dictionaries.en): SnackbarSta
       description: t.portConflictAdvice,
     };
   }
-  if (lower.includes("no model") || lower.includes("model")) {
+  if (lower.includes("no model") || lower.includes("model not found")) {
     return {
       kind: "error",
       title: t.operationFailed,
