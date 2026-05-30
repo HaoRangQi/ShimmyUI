@@ -6,7 +6,7 @@ vibe by codex， 让我们谢谢 codex。
 
 用于管理和运维 Shimmy 推理服务的本地 Web UI。
 
-<img src="./docs/aegis/work/2026-05-29-phase-2-roadmap-p0/screenshots/desktop-overview.png" alt="Shimmy UI 预览" width="600" height="300" style="object-fit: cover; border-radius: 8px;" />
+<img src="./pics/p-1.png" alt="Shimmy UI 预览" width="100%" style="height: auto; border-radius: 8px;" />
 
 ## 功能说明
 

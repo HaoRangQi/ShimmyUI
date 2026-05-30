@@ -6,7 +6,7 @@ vibe by codex, let us thank codex.
 
 Local Web UI for managing and operating a Shimmy inference server.
 
-<img src="./docs/aegis/work/2026-05-29-phase-2-roadmap-p0/screenshots/desktop-overview.png" alt="Shimmy UI preview" width="600" height="300" style="object-fit: cover; border-radius: 8px;" />
+<img src="./pics/p-1.png" alt="Shimmy UI preview" width="100%" style="height: auto; border-radius: 8px;" />
 
 ## What It Does
 
